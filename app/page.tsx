@@ -23,13 +23,6 @@ function PushNotificationManager() {
   );
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    if ("serviceWorker" in navigator && "PushManager" in window) {
-      setIsSupported(true);
-      registerServiceWorker();
-    }
-  }, []);
-
   async function registerServiceWorker() {
     const registration = await navigator.serviceWorker.register("/sw.js", {
       scope: "/",
@@ -37,7 +30,14 @@ function PushNotificationManager() {
     });
     const sub = await registration.pushManager.getSubscription();
     setSubscription(sub);
+    setIsSupported(true);
   }
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      void Promise.resolve().then(registerServiceWorker);
+    }
+  }, []);
 
   async function subscribeToPush() {
     const registration = await navigator.serviceWorker.ready;
@@ -95,16 +95,23 @@ function PushNotificationManager() {
 }
 
 function InstallPrompt() {
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS] = useState(() => {
+    if (typeof navigator === "undefined" || typeof window === "undefined") {
+      return false;
+    }
 
-  useEffect(() => {
-    setIsIOS(
-      /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream,
+    return (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+      !("MSStream" in window)
     );
+  });
+  const [isStandalone] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
 
-    setIsStandalone(window.matchMedia("(display-mode: standalone)").matches);
-  }, []);
+    return window.matchMedia("(display-mode: standalone)").matches;
+  });
 
   if (isStandalone) {
     return null; // Don't show install button if already installed
@@ -121,7 +128,7 @@ function InstallPrompt() {
             {" "}
             ⎋{" "}
           </span>
-          and then "Add to Home Screen"
+          and then &quot;Add to Home Screen&quot;
           <span role="img" aria-label="plus icon">
             {" "}
             ➕{" "}
