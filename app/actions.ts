@@ -4,7 +4,7 @@ import webpush from "web-push";
 import type { PushSubscription as WebPushSubscription } from "web-push";
 
 webpush.setVapidDetails(
-  "<mailto:your-email@example.com>",
+  "mailto:your-email@example.com",
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
   process.env.VAPID_PRIVATE_KEY!,
 );
@@ -25,17 +25,22 @@ export async function unsubscribeUser() {
   return { success: true };
 }
 
-export async function sendNotification(message: string) {
-  if (!subscription) {
+export async function sendNotification(
+  message: string,
+  currentSubscription?: WebPushSubscription,
+) {
+  const targetSubscription = currentSubscription ?? subscription;
+
+  if (!targetSubscription) {
     throw new Error("No subscription available");
   }
 
   try {
     await webpush.sendNotification(
-      subscription,
+      targetSubscription,
       JSON.stringify({
         title: "Test Notification",
-        body: message,
+        body: message || "This is a test notification.",
         icon: "/icon.png",
       }),
     );

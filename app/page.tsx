@@ -3,6 +3,12 @@
 import { useState, useEffect } from "react";
 import { subscribeUser, unsubscribeUser, sendNotification } from "./actions";
 
+const presetNotifications = [
+  "Your first hardcoded push notification worked.",
+  "Reminder: this PWA can receive notifications from Vercel.",
+  "Test alert sent from the Home Screen app.",
+];
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -22,6 +28,7 @@ function PushNotificationManager() {
     null,
   );
   const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("");
 
   async function registerServiceWorker() {
     const registration = await navigator.serviceWorker.register("/sw.js", {
@@ -40,28 +47,61 @@ function PushNotificationManager() {
   }, []);
 
   async function subscribeToPush() {
-    const registration = await navigator.serviceWorker.ready;
-    const sub = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(
-        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-      ),
-    });
-    setSubscription(sub);
-    const serializedSub = JSON.parse(JSON.stringify(sub));
-    await subscribeUser(serializedSub);
+    try {
+      setStatus("Subscribing...");
+      const permission = await Notification.requestPermission();
+
+      if (permission !== "granted") {
+        setStatus("Notifications were not allowed.");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      const sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+        ),
+      });
+      setSubscription(sub);
+      const serializedSub = JSON.parse(JSON.stringify(sub));
+      await subscribeUser(serializedSub);
+      setStatus("Subscribed. Try sending a test notification.");
+    } catch (error) {
+      console.error("Failed to subscribe to push notifications:", error);
+      setStatus("Subscription failed. Check the browser console and VAPID keys.");
+    }
   }
 
   async function unsubscribeFromPush() {
     await subscription?.unsubscribe();
     setSubscription(null);
     await unsubscribeUser();
+    setStatus("Unsubscribed.");
   }
 
-  async function sendTestNotification() {
-    if (subscription) {
-      await sendNotification(message);
-      setMessage("");
+  async function sendTestNotification(notificationMessage = message) {
+    if (!subscription) {
+      setStatus("Subscribe before sending a notification.");
+      return;
+    }
+
+    try {
+      setStatus("Sending notification...");
+      const serializedSub = JSON.parse(JSON.stringify(subscription));
+      const result = await sendNotification(notificationMessage, serializedSub);
+
+      if (result.success) {
+        setMessage("");
+        setStatus("Notification sent.");
+      } else {
+        setStatus(result.error ?? "Failed to send notification.");
+      }
+    } catch (error) {
+      console.error("Failed to send push notification:", error);
+      setStatus(
+        error instanceof Error ? error.message : "Failed to send notification.",
+      );
     }
   }
 
@@ -82,12 +122,24 @@ function PushNotificationManager() {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <button onClick={sendTestNotification}>Send Test</button>
+          <button onClick={() => sendTestNotification()}>Send Test</button>
+          <div>
+            {presetNotifications.map((notificationMessage) => (
+              <button
+                key={notificationMessage}
+                onClick={() => sendTestNotification(notificationMessage)}
+              >
+                {notificationMessage}
+              </button>
+            ))}
+          </div>
+          {status && <p>{status}</p>}
         </>
       ) : (
         <>
           <p>You are not subscribed to push notifications.</p>
           <button onClick={subscribeToPush}>Subscribe</button>
+          {status && <p>{status}</p>}
         </>
       )}
     </div>
